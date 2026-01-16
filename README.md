@@ -45,7 +45,7 @@ Due to the large size of the datasets, they are not included in this repository.
 
 Download all required data files from the link below:
 
-👉 **Data download:** https://YOUR-DATA-LINK-HERE
+👉 **Data download:** [Google Drive Folder](https://drive.google.com/drive/folders/18qofG2O8Z3_T8WQbZwh3n-cSEi1Pl-xo?usp=sharing)
 
 ### 2. Folder structure
 After downloading and extracting the files, place them **relative to the project root** exactly as shown in the **Folder Tour** section above.
