@@ -1,0 +1,1690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Census Data Interactive Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
+          crossorigin=""/>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+            color: #fff;
+        }
+        
+        #container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+        
+        #sidebar {
+            width: 360px;
+            background: rgba(20, 20, 30, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            overflow-y: auto;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.5);
+            border-right: 1px solid rgba(76, 175, 80, 0.2);
+            z-index: 1000;
+        }
+        
+        #map {
+            flex: 1;
+            height: 100vh;
+            position: relative;
+            background: #1a1a2e;
+        }
+        
+        /* Smooth, professional color transitions for map features */
+        .leaflet-overlay-pane svg path,
+        .leaflet-overlay-pane canvas {
+            transition: opacity 0.2s ease-out;
+        }
+        
+        /* Smooth legend updates */
+        .legend {
+            transition: opacity 0.2s ease;
+        }
+        
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #4CAF50 0%, #8BC34A 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        
+        .subtitle {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 30px;
+            font-weight: 400;
+        }
+        
+        .control-group {
+            margin-bottom: 25px;
+            padding-bottom: 25px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .control-group:last-of-type {
+            border-bottom: none;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(40, 40, 50, 0.8);
+            border: 2px solid rgba(76, 175, 80, 0.3);
+            color: #fff;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        select:hover {
+            border-color: rgba(76, 175, 80, 0.5);
+            background: rgba(50, 50, 60, 0.9);
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+            background: rgba(50, 50, 60, 1);
+        }
+        
+        select:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .year-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-direction: column;
+        }
+
+        .year-slider-stack {
+            position: relative;
+            width: 100%;
+            height: auto;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 0;
+        }
+
+        .vertical-slider-wrapper {
+            position: relative;
+            flex: 1;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        input[type="range"].vertical-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 12px;
+            transform: none;
+            border-radius: 999px;
+            background: rgba(40, 40, 50, 0.9);
+            border: 2px solid rgba(76, 175, 80, 0.3);
+            outline: none;
+            cursor: pointer;
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25);
+        }
+
+        input[type="range"].vertical-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4CAF50 0%, #81C784 100%);
+            border: 2px solid #1B5E20;
+            cursor: pointer;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+        }
+
+        input[type="range"].vertical-slider::-moz-range-thumb {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #4CAF50 0%, #81C784 100%);
+            border: 2px solid #1B5E20;
+            cursor: pointer;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+        }
+
+        .year-end-label {
+            font-size: 12px;
+            font-weight: 800;
+            color: #8BC34A;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.4);
+            user-select: none;
+        }
+
+        .year-current-display {
+            min-width: 90px;
+            padding: 6px 8px;
+            background: rgba(76, 175, 80, 0.15);
+            border: 2px solid rgba(76,175,80,0.4);
+            border-radius: 12px;
+            box-shadow: 0 8px 18px rgba(0,0,0,0.25);
+            text-align: center;
+            align-self: center;
+        }
+
+        .year-current-display .year-badge-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #8BC34A;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .year-current-display .year-badge-value {
+            font-size: 22px;
+            font-weight: 800;
+            color: #e8f5e9;
+        }
+
+        
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            border: none;
+            color: white;
+            font-size: 15px;
+            font-weight: 700;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+        }
+        
+        button:disabled {
+            background: rgba(60, 60, 70, 0.5);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .mode-btn {
+            background: rgba(60, 60, 70, 0.5);
+        }
+        
+        .mode-btn.active {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+        }
+        
+        .status {
+            padding: 12px 15px;
+            background: rgba(40, 40, 50, 0.6);
+            border-radius: 8px;
+            font-size: 12px;
+            margin-top: 10px;
+            border-left: 3px solid #555;
+        }
+        
+        .status.success {
+            background: rgba(27, 94, 32, 0.3);
+            color: #a5d6a7;
+            border-left-color: #4CAF50;
+        }
+        
+        .status.error {
+            background: rgba(183, 28, 28, 0.3);
+            color: #ffcdd2;
+            border-left-color: #f44336;
+        }
+        
+        .legend {
+            background: rgba(255, 255, 255, 0.98);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            min-width: 250px;
+        }
+        
+        .legend-title {
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: #1a1a2e;
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        .legend-scale {
+            height: 35px;
+            background: linear-gradient(to right, #2166ac, #67a9cf, #f7f7f7, #fddbc7, #d73027);
+            margin-bottom: 10px;
+            border-radius: 6px;
+        }
+        
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #555;
+            font-weight: 600;
+        }
+        
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.95);
+            padding: 40px 60px;
+            border-radius: 16px;
+            z-index: 10000;
+            display: none;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(76, 175, 80, 0.2);
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Small non-blocking rendering indicator */
+        .rendering-indicator {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(76, 175, 80, 0.95);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            z-index: 2000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .rendering-indicator.visible {
+            opacity: 1;
+        }
+
+        .info-card {
+            position: absolute;
+            background: linear-gradient(145deg, rgba(20, 30, 40, 0.98), rgba(25, 35, 50, 0.98));
+            border: 1px solid rgba(76, 175, 80, 0.18);
+            border-radius: 12px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+            padding: 12px 14px;
+            color: #e8f5e9;
+            min-width: 220px;
+            max-width: 340px;
+            pointer-events: none;
+            display: none;
+            z-index: 1200;
+            transform: translate(-50%, -110%);
+            word-wrap: break-word;
+            white-space: normal;
+        }
+
+        .info-card h4 {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            letter-spacing: 0.6px;
+            color: #bfe8c6;
+            text-transform: uppercase;
+            font-weight: 800;
+        }
+
+        .info-card .info-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin: 2px 0;
+            color: #d7e9d7;
+        }
+
+        .info-card .info-row span:first-child {
+            color: #9eb7a0;
+        }
+
+        .info-card .field-label {
+            color: #9eb7a0;
+            font-weight: 700;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-right: 8px;
+            flex: 0 0 auto;
+        }
+
+        .info-card .field-value {
+            color: #e8f5e9;
+            font-weight: 600;
+            text-align: right;
+            flex: 1 1 0;
+            word-break: break-word;
+        }
+
+        .info-card .description-text {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #d7e9d7;
+            line-height: 1.3;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <div id="loadingText" style="text-align: center; color: #4CAF50;">Processing data...</div>
+    </div>
+    
+    <div id="container">
+        <div id="sidebar">
+            <h1>📊 Census Analysis Map</h1>
+            <div class="subtitle">Interactive demographic visualization</div>
+            
+            <div class="control-group">
+                <label>Select Analysis Mode</label>
+                <div style="display: flex; gap: 10px;">
+                    <button id="clusteringBtn" class="mode-btn" style="flex: 1; padding: 12px;">Clustering</button>
+                    <button id="predictionsBtn" class="mode-btn" style="flex: 1; padding: 12px;">Predictions</button>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label>Data Status</label>
+                <div id="geojsonStatus" class="status">⏳ Loading boundaries...</div>
+                <div id="dataStatus" class="status">⏳ Select a mode to load data...</div>
+            </div>
+            
+            <div class="control-group">
+                <label>Select Year</label>
+                <div class="year-control">
+                    <div class="year-slider-stack">
+                        <span id="yearMinLabel" class="year-end-label">-</span>
+                        <div class="vertical-slider-wrapper">
+                            <input type="range" id="yearSlider" class="vertical-slider" disabled />
+                        </div>
+                        <span id="yearMaxLabel" class="year-end-label">-</span>
+                    </div>
+                    <div class="year-current-display">
+                        <span class="year-badge-label">Year</span>
+                        <span id="yearCurrentLabel" class="year-badge-value">Select a mode</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-group" id="variableGroup" style="display: none;">
+                <label>Select Variable to Visualize</label>
+                <select id="variableSelect" disabled>
+                    <option value="">-- Select Variable --</option>
+                </select>
+            </div>
+
+            <div class="control-group" id="cityGroup" style="display: none;">
+                <label>Select City</label>
+                <select id="citySelect" disabled>
+                    <option value="">-- Select City --</option>
+                </select>
+            </div>
+
+            <div class="control-group" id="stateGroup" style="display: none;">
+                <label>Select City</label>
+                <select id="stateSelect" disabled>
+                    <option value="">-- Select City --</option>
+                </select>
+            </div>
+            
+            <div id="stats" class="status" style="display: none; margin-top: 20px;"></div>
+        </div>
+        
+        <div id="map">
+            <div id="renderingIndicator" class="rendering-indicator">Updating map...</div>
+            <div id="infoCard" class="info-card"></div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script>
+        console.log('Script starting...');
+        
+        let map;
+        let geoData = null;
+        let currentData = null;
+        let currentLayer = null;
+        let legend = null;
+        let currentYears = [];
+        let currentMode = null;
+        // List of target cities to show in predictions. Each entry has `city` and `state` for matching.
+        const CITY_LIST = [
+            {city: 'Las Vegas', state: 'Nevada', stateAbbr: 'NV'},
+            {city: 'Orlando', state: 'Florida', stateAbbr: 'FL'},
+            {city: 'Phoenix', state: 'Arizona', stateAbbr: 'AZ'},
+            {city: 'Sacramento', state: 'California', stateAbbr: 'CA'},
+            {city: 'Pittsburgh', state: 'Pennsylvania', stateAbbr: 'PA'},
+            {city: 'Detroit', state: 'Michigan', stateAbbr: 'MI'},
+            {city: 'Houston', state: 'Texas', stateAbbr: 'TX'},
+            {city: 'Seattle', state: 'Washington', stateAbbr: 'WA'},
+            {city: 'Boston', state: 'Massachusetts', stateAbbr: 'MA'},
+            {city: 'Chicago', state: 'Illinois', stateAbbr: 'IL'},
+            {city: 'New York', state: 'New York', stateAbbr: 'NY'},
+            {city: 'Atlanta', state: 'Georgia', stateAbbr: 'GA'}
+        ];
+        let userHasZoomed = false; // Track if user manually interacted with map
+        let renderTimeout = null; // Debounce for rendering
+        const USA_BOUNDS = L.latLngBounds(
+            [24.396308, -125.0],   // Southwest (approx CONUS)
+            [49.384358, -66.93457] // Northeast (approx CONUS)
+        );
+
+        function showLoading(message) {
+            const overlay = document.getElementById('loading');
+            const text = document.getElementById('loadingText');
+            if (!overlay || !text) return;
+
+            if (message) {
+                text.textContent = message;
+            }
+
+            overlay.style.display = 'block';
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loading');
+            if (overlay) {
+                overlay.style.display = 'none';
+            }
+        }
+
+        function toTitleCaseLabel(raw) {
+            if (!raw) return '';
+            const s = raw.toString().replace(/_/g, ' ').toLowerCase().trim();
+            return s.split(/\s+/).map(word => {
+                if (!word) return '';
+                return word.charAt(0).toUpperCase() + word.slice(1);
+            }).join(' ');
+        }
+        
+        // Wait for DOM and Leaflet to be ready
+        function initializeApp() {
+            console.log('Initializing app...');
+            console.log('Leaflet available:', typeof L !== 'undefined');
+            console.log('PapaParse available:', typeof Papa !== 'undefined');
+            
+            // Initialize map
+            try {
+                console.log('Creating map...');
+                map = L.map('map', {
+                    center: [37.8, -96],
+                    zoom: 4,
+                    zoomControl: true,
+                    preferCanvas: true  // Use Canvas renderer for better performance
+                });
+                
+                console.log('Adding tile layer...');
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap',
+                    maxZoom: 19,
+                    minZoom: 3
+                }).addTo(map);
+                
+                // Track user interactions with map
+                map.on('zoomstart', function(e) {
+                    // Only set userHasZoomed if the zoom wasn't triggered by fitBounds
+                    if (!e.hard) {
+                        userHasZoomed = true;
+                    }
+                });
+                
+                map.on('dragstart', function() {
+                    userHasZoomed = true;
+                });
+                
+                console.log('Map created successfully');
+                
+                // Force resize
+                setTimeout(() => {
+                    map.invalidateSize();
+                    console.log('Map size invalidated');
+                }, 200);
+                
+            } catch (error) {
+                console.error('Map initialization error:', error);
+                alert('Map initialization failed: ' + error.message);
+                return;
+            }
+            
+            // Load GeoJSON
+            loadGeoJSON().then(() => {
+                selectMode('clustering');
+            });
+            
+            // Setup event listeners
+            document.getElementById('clusteringBtn').addEventListener('click', () => {
+                console.log('Clustering clicked');
+                selectMode('clustering');
+            });
+            
+            document.getElementById('predictionsBtn').addEventListener('click', () => {
+                console.log('Predictions clicked');
+                selectMode('predictions');
+            });
+            
+            document.getElementById('yearSlider').addEventListener('input', onYearChange);
+            document.getElementById('variableSelect').addEventListener('change', onVariableChange);
+            // city select listener (populated when predictions load)
+            document.getElementById('citySelect').addEventListener('change', onCityChange);
+            // state select listener (populated when clustering loads)
+            document.getElementById('stateSelect').addEventListener('change', onStateChange);
+        }
+        
+        async function loadGeoJSON() {
+            const status = document.getElementById('geojsonStatus');
+            
+            try {
+                status.textContent = '⏳ Loading boundaries...';
+                console.log('Fetching GeoJSON from: data/census_tracts.geojson');
+                
+                const response = await fetch('data/census_tracts.geojson');
+                console.log('Response status:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const text = await response.text();
+                console.log('GeoJSON text length:', text.length);
+                
+                geoData = JSON.parse(text);
+                console.log('GeoJSON parsed, features:', geoData.features.length);
+                
+                status.className = 'status success';
+                status.textContent = `✓ Loaded ${geoData.features.length.toLocaleString()} tracts`;
+            } catch (error) {
+                status.className = 'status error';
+                status.textContent = `✗ Error: ${error.message}`;
+                console.error('GeoJSON load error:', error);
+            }
+        }
+        
+        async function selectMode(mode) {
+            console.log('Selecting mode:', mode);
+            currentMode = mode;
+
+            // 👇 Immediately hide any old loader from the previous mode
+            hideLoading();
+
+            // Reset zoom tracking when changing modes
+            userHasZoomed = false;
+
+            // Clear any existing layers/legend/stats when switching modes
+            if (currentLayer) {
+                map.removeLayer(currentLayer);
+                currentLayer = null;
+            }
+            if (legend) {
+                map.removeControl(legend);
+                legend = null;
+            }
+            const statsBox = document.getElementById('stats');
+            statsBox.style.display = 'none';
+            hideInfoCard();
+            
+            const clusteringBtn = document.getElementById('clusteringBtn');
+            const predictionsBtn = document.getElementById('predictionsBtn');
+            const variableGroup = document.getElementById('variableGroup');
+            
+            if (mode === 'clustering') {
+                clusteringBtn.classList.add('active');
+                predictionsBtn.classList.remove('active');
+                variableGroup.style.display = 'none';
+                const cityGroup = document.getElementById('cityGroup');
+                if (cityGroup) cityGroup.style.display = 'none';
+                const stateGroup = document.getElementById('stateGroup');
+                if (stateGroup) stateGroup.style.display = 'block';
+                await loadClustering();
+            } else {
+                predictionsBtn.classList.add('active');
+                clusteringBtn.classList.remove('active');
+                variableGroup.style.display = 'block';
+                const stateGroup = document.getElementById('stateGroup');
+                if (stateGroup) stateGroup.style.display = 'none';
+                const cityGroup = document.getElementById('cityGroup');
+                if (cityGroup) cityGroup.style.display = 'block';
+                await loadPredictions();
+            }
+        }
+
+        
+        async function loadClustering() {
+            const status = document.getElementById('dataStatus');
+            const modeAtStart = currentMode;    // 👈 remember which mode started this load
+
+            showLoading('Loading clustering data...');
+            
+            try {
+                status.textContent = '⏳ Loading clustering...';
+                console.log('Fetching: data/clustering.csv');
+                
+                const response = await fetch('data/clustering.csv');
+                console.log('Clustering response:', response.status);
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const csvText = await response.text();
+                console.log('CSV length:', csvText.length);
+                console.log('First 200 chars:', csvText.substring(0, 200));
+                
+                Papa.parse(csvText, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        // 🔒 If user switched to predictions while this was loading, ignore it
+                        if (currentMode !== 'clustering' || modeAtStart !== 'clustering') {
+                            console.log('Clustering load finished but mode changed; ignoring results.');
+                            hideLoading();
+                            return;
+                        }
+
+                        console.log('Parse complete, rows:', results.data.length);
+                        console.log('Sample row:', results.data[0]);
+                        
+                        currentData = normalizePredictionData(results.data);
+                        status.className = 'status success';
+                        status.textContent = `✓ Loaded ${currentData.length.toLocaleString()} clustering data`;
+                        updateYearSlider();
+                        updateVariableSelect();
+                        populateStateSelect();
+                        hideLoading();
+                        
+                        // Auto-render first year (USA/all if no city selected)
+                        if (currentYears.length > 0) {
+                            renderClusteringMap(currentYears[0], null, true);
+                        }
+                    },
+                    error: (error) => {
+                        // 🔒 Same safeguard on parse error
+                        if (currentMode !== 'clustering' || modeAtStart !== 'clustering') {
+                            console.log('Clustering parse error but mode changed; ignoring.');
+                            hideLoading();
+                            return;
+                        }
+
+                        console.error('Parse error:', error);
+                        status.className = 'status error';
+                        status.textContent = `✗ Parse error: ${error.message}`;
+                        hideLoading();
+                    }
+                });
+            } catch (error) {
+                if (currentMode !== 'clustering' || modeAtStart !== 'clustering') {
+                    console.log('Clustering fetch error but mode changed; ignoring.');
+                    hideLoading();
+                    return;
+                }
+
+                status.className = 'status error';
+                status.textContent = `✗ Error: ${error.message}`;
+                console.error('Clustering error:', error);
+                hideLoading();
+            }
+        }
+
+        
+        async function loadPredictions() {
+            const status = document.getElementById('dataStatus');
+            const modeAtStart = currentMode;   // 👈 remember which mode started this load
+
+            showLoading('Loading predictions data...');
+            
+            try {
+                status.textContent = '⏳ Loading predictions...';
+                console.log('Fetching: data/predictions.csv');
+                
+                const response = await fetch('data/predictions.csv');
+                console.log('Predictions response:', response.status);
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const csvText = await response.text();
+                console.log('CSV length:', csvText.length);
+                console.log('First 200 chars:', csvText.substring(0, 200));
+                
+                Papa.parse(csvText, {
+                    header: true,
+                    dynamicTyping: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        // 🔒 If user switched back to clustering, discard this
+                        if (currentMode !== 'predictions' || modeAtStart !== 'predictions') {
+                            console.log('Predictions load finished but mode changed; ignoring results.');
+                            hideLoading();
+                            return;
+                        }
+
+                        console.log('Parse complete, rows:', results.data.length);
+                        console.log('Sample row:', results.data[0]);
+                        
+                        currentData = results.data;
+                        status.className = 'status success';
+                        status.textContent = `✓ Loaded ${currentData.length.toLocaleString()} predictions`;
+                        updateYearSlider();
+                        updateVariableSelect();
+                        populateCitySelect();
+                        hideLoading();
+
+                        const variableSelect = document.getElementById('variableSelect');
+                        if (variableSelect) {
+                            const firstVariable =
+                                variableSelect.options.length > 1
+                                    ? variableSelect.options[1].value
+                                    : '';
+                            if (firstVariable && currentYears.length > 0) {
+                                variableSelect.value = firstVariable;
+                            }
+                        }
+                    },
+                    error: (error) => {
+                        if (currentMode !== 'predictions' || modeAtStart !== 'predictions') {
+                            console.log('Predictions parse error but mode changed; ignoring.');
+                            hideLoading();
+                            return;
+                        }
+
+                        console.error('Parse error:', error);
+                        status.className = 'status error';
+                        status.textContent = `✗ Parse error: ${error.message}`;
+                        hideLoading();
+                    }
+                });
+            } catch (error) {
+                if (currentMode !== 'predictions' || modeAtStart !== 'predictions') {
+                    console.log('Predictions fetch error but mode changed; ignoring.');
+                    hideLoading();
+                    return;
+                }
+
+                status.className = 'status error';
+                status.textContent = `✗ Error: ${error.message}`;
+                console.error('Predictions error:', error);
+                hideLoading();
+            }
+        }
+
+        
+        function updateYearSlider() {
+            const yearSlider = document.getElementById('yearSlider');
+            const yearMinLabel = document.getElementById('yearMinLabel');
+            const yearMaxLabel = document.getElementById('yearMaxLabel');
+            const yearCurrentLabel = document.getElementById('yearCurrentLabel');
+
+            if (!currentData || currentData.length === 0) {
+                console.log('No data for year slider');
+                yearSlider.disabled = true;
+                return;
+            }
+
+            // Always keep the internal years array in ascending order (oldest -> newest)
+            const years = [...new Set(
+                currentData
+                    .map(d => Number(d.YEAR))
+                    .filter(y => !isNaN(y))
+            )].sort((a, b) => a - b);
+
+            currentYears = years;
+            console.log('Years:', years);
+
+            if (years.length === 0) {
+                yearSlider.disabled = true;
+                yearCurrentLabel.textContent = 'No years';
+                return;
+            }
+
+            yearSlider.disabled = false;
+            yearSlider.min = 0;
+            yearSlider.max = years.length - 1;
+            yearSlider.step = 1;
+
+            // For predictions mode, default to the most recent year (rightmost);
+            // for clustering (or other modes), default to the earliest year.
+            if (currentMode === 'predictions') {
+                yearSlider.value = years.length - 1;
+            } else {
+                yearSlider.value = 0;
+            }
+
+            setYearSliderTicks(years.length);
+
+            // Always display the labels as min (smallest) and max (largest)
+            yearMinLabel.textContent = years[0];
+            yearMaxLabel.textContent = years[years.length - 1];
+
+            const currentIndex = parseInt(yearSlider.value, 10) || 0;
+            const currentYear = years[currentIndex];
+            yearCurrentLabel.textContent = currentYear;
+            updateYearBadge(currentYear);
+        }
+
+        function setYearSliderTicks(count) {
+            const slider = document.getElementById('yearSlider');
+            if (!slider) return;
+            if (!count || count < 2) {
+                slider.style.background = 'rgba(40, 40, 50, 0.9)';
+                return;
+            }
+            const segments = Math.max(1, count - 1);
+            const segmentPercent = 100 / segments;
+            slider.style.background = `
+                linear-gradient(to right, rgba(30, 30, 40, 0.95), rgba(30, 30, 40, 0.95)),
+                repeating-linear-gradient(
+                    to right,
+                    rgba(255, 255, 255, 1),
+                    rgba(255, 255, 255, 1) 5px,
+                    transparent 5px,
+                    transparent ${segmentPercent}%
+                )
+            `;
+            slider.style.boxShadow = 'inset 0 0 0 1px rgba(0,0,0,0.35), 0 0 6px rgba(255,255,255,0.5)';
+            // Ensure background sizes align with slider width
+            slider.style.backgroundSize = `100% 100%, 100% 100%`;
+        }
+
+        function updateYearBadge(year) {
+            const yearSlider = document.getElementById('yearSlider');
+            const yearCurrentLabel = document.getElementById('yearCurrentLabel');
+            if (!yearSlider || !yearCurrentLabel) return;
+            if (yearSlider.disabled) return;
+
+            yearCurrentLabel.textContent = year;
+        }
+
+        function normalizePredictionData(data) {
+            if (!data || !data.length) return [];
+            return data.map(row => {
+                const normalized = {...row};
+                const lowerKeys = Object.keys(row).reduce((acc, key) => {
+                    acc[key.toLowerCase()] = key;
+                    return acc;
+                }, {});
+
+                // Normalize YEAR
+                if ('year' in lowerKeys) {
+                    const key = lowerKeys['year'];
+                    const val = row[key];
+                    const num = val != null ? Number(val) : null;
+                    if (!isNaN(num)) normalized.YEAR = num;
+                }
+
+                // Normalize GISJOIN
+                if ('gisjoin' in lowerKeys) {
+                    normalized.GISJOIN = row[lowerKeys['gisjoin']];
+                } else if ('gis join' in lowerKeys || 'gis_join' in lowerKeys) {
+                    const key = lowerKeys['gis join'] || lowerKeys['gis_join'];
+                    normalized.GISJOIN = row[key];
+                }
+
+                return normalized;
+            });
+        }
+
+        function showInfoCard(title, rows, evt) {
+            const card = document.getElementById('infoCard');
+            if (!card) return;
+
+            function escapeHtml(unsafe) {
+                if (unsafe == null) return '—';
+                return String(unsafe)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            let html = `<h4>${escapeHtml(title)}</h4>`;
+
+            rows.forEach(r => {
+                const label = r.label ? String(r.label) : '';
+                const rawValue = r.value != null ? r.value : '—';
+                const value = escapeHtml(rawValue);
+
+                if (label.toLowerCase() === 'description') {
+                    // Full-width, wrapped description block
+                    html += `<div class="description-text">${value}</div>`;
+                } else {
+                    html += `
+                        <div class="info-row">
+                            <span class="field-label">${escapeHtml(label)}</span>
+                            <span class="field-value">${value}</span>
+                        </div>
+                    `;
+                }
+            });
+
+            card.innerHTML = html;
+            card.style.display = 'block';
+            positionInfoCard(evt);
+        }
+
+        function hideInfoCard() {
+            const card = document.getElementById('infoCard');
+            if (card) {
+                card.style.display = 'none';
+                card.innerHTML = '';
+            }
+        }
+
+        function formatNumber(val, digits = 2) {
+            if (val == null || isNaN(val)) return '—';
+
+            let num = Number(val);
+
+            // Clamp negatives to 0
+            if (num < 0) num = 0;
+
+            if (Math.abs(num) >= 1000) {
+                return num.toLocaleString(undefined, { maximumFractionDigits: digits });
+            }
+            return num.toFixed(digits);
+        }
+
+
+        function positionInfoCard(evt) {
+            const card = document.getElementById('infoCard');
+            const mapEl = document.getElementById('map');
+            if (!card || !mapEl || !evt || !evt.originalEvent) return;
+            const rect = mapEl.getBoundingClientRect();
+            const x = evt.originalEvent.clientX - rect.left;
+            const y = evt.originalEvent.clientY - rect.top;
+
+            // Keep within map bounds
+            const clampedX = Math.max(20, Math.min(rect.width - 20, x));
+            const clampedY = Math.max(20, Math.min(rect.height - 20, y));
+
+            card.style.left = `${clampedX}px`;
+            card.style.top = `${clampedY}px`;
+        }
+        
+        function updateVariableSelect() {
+            const select = document.getElementById('variableSelect');
+            
+            if (currentData && currentData.length > 0) {
+                const columns = Object.keys(currentData[0])
+                    .filter(k => {
+                        const key = k.toLowerCase();
+                        // Exclude identifying / location columns from variable list
+                        const exclude = ['gisjoin','year','cluster','macro_label','bmu','node_index','city','state','place','county','tract','name'];
+                        return !exclude.some(ex => key === ex || key.indexOf(ex) !== -1);
+                    });
+                
+                console.log('Variables:', columns);
+                
+                select.innerHTML = '<option value="">-- Select Variable --</option>' + 
+                    columns.map(col => 
+                        `<option value="${col}">${toTitleCaseLabel(col)}</option>`
+                    ).join('');
+            }
+        }
+
+        function populateCitySelect() {
+            const citySelect = document.getElementById('citySelect');
+            const cityGroup = document.getElementById('cityGroup');
+            if (!citySelect || !cityGroup) return;
+
+            cityGroup.style.display = 'block';
+            citySelect.disabled = false;
+
+            // Disable variable select until a city is chosen
+            const variableSelect = document.getElementById('variableSelect');
+            if (variableSelect) variableSelect.disabled = true;
+
+            citySelect.innerHTML = '<option value="">-- Select City --</option>' +
+                CITY_LIST.map(c => `<option value="${c.city}___${c.state}">${c.city}, ${c.stateAbbr}</option>`).join('');
+        }
+        
+        function onYearChange() {
+            const yearCurrentLabel = document.getElementById('yearCurrentLabel');
+            if (!currentYears.length) return;
+
+            const idx = parseInt(this.value, 10) || 0;
+            const year = currentYears[idx];
+            
+            // Update label immediately for instant feedback
+            yearCurrentLabel.textContent = year;
+            updateYearBadge(year);
+
+            // Clear any pending render
+            if (renderTimeout) {
+                clearTimeout(renderTimeout);
+            }
+
+            // Show rendering indicator
+            const indicator = document.getElementById('renderingIndicator');
+            indicator.classList.add('visible');
+
+            // Debounce the actual rendering so slider moves freely
+            // Render after user stops moving for 150ms
+            renderTimeout = setTimeout(() => {
+                if (!currentMode) {
+                    indicator.classList.remove('visible');
+                    return;
+                }
+
+                if (currentMode === 'clustering') {
+                    const stateVal = document.getElementById('stateSelect').value || '';
+                    const cityObj = stateVal ? parseCityValue(stateVal) : null;
+                    renderClusteringMap(year, cityObj, false);
+                } else {
+                    const variable = document.getElementById('variableSelect').value;
+                    if (variable) {
+                        const cityVal = document.getElementById('citySelect').value || '';
+                        const cityObj = parseCityValue(cityVal);
+                        renderPredictionsMap(year, variable, cityObj, false);
+                    }
+                }
+                
+                // Hide indicator after render completes
+                setTimeout(() => {
+                    indicator.classList.remove('visible');
+                }, 100);
+            }, 150);
+        }
+        
+        function onVariableChange() {
+            const variable = this.value;
+            if (!variable || !currentYears.length) return;
+
+            const idx = parseInt(document.getElementById('yearSlider').value, 10) || 0;
+            const year = currentYears[idx];
+            const cityVal = document.getElementById('citySelect').value || '';
+            const cityObj = parseCityValue(cityVal);
+            renderPredictionsMap(year, variable, cityObj, false);
+        }
+
+        function onCityChange() {
+            const cityVal = this.value || '';
+            const cityObj = parseCityValue(cityVal);
+            console.log('City selected:', cityObj);
+
+            // Reset userHasZoomed so that the city zoom always happens
+            userHasZoomed = false;
+
+            // show a small loading status so user knows something is happening
+            showLoading('Applying city filter...');
+
+            // Enable variable select when a city is chosen
+            const variableSelect = document.getElementById('variableSelect');
+            if (variableSelect) {
+                variableSelect.disabled = false;
+                // If no variable chosen yet, auto-select first non-empty variable
+                if (!variableSelect.value || variableSelect.value === '') {
+                    const opt = Array.from(variableSelect.options).find(o => o.value && o.value !== '');
+                    if (opt) variableSelect.value = opt.value;
+                }
+            }
+
+            const variable = variableSelect ? variableSelect.value : '';
+            if (!currentYears.length) {
+                hideLoading();
+                console.warn('No years available to render');
+                return;
+            }
+
+            const idx = parseInt(document.getElementById('yearSlider').value, 10) || 0;
+            const year = currentYears[idx];
+
+            try {
+                renderPredictionsMap(year, variable, cityObj, true);
+            } catch (err) {
+                console.error('Error rendering predictions for city:', err);
+                const stats = document.getElementById('stats');
+                stats.style.display = 'block';
+                stats.className = 'status error';
+                stats.textContent = 'Error rendering predictions: ' + (err && err.message ? err.message : String(err));
+            } finally {
+                hideLoading();
+            }
+        }
+
+        function parseCityValue(val) {
+            if (!val) return null;
+            const parts = val.split('___');
+            const cityName = parts[0] || '';
+            const stateName = parts[1] || '';
+            
+            // Find the matching city object to get the state abbreviation
+            const cityInfo = CITY_LIST.find(c => c.city === cityName && c.state === stateName);
+            
+            return {
+                city: cityName, 
+                state: stateName,
+                stateAbbr: cityInfo ? cityInfo.stateAbbr : ''
+            };
+        }
+
+        function populateStateSelect() {
+            const stateSelect = document.getElementById('stateSelect');
+            const stateGroup = document.getElementById('stateGroup');
+            if (!stateSelect || !stateGroup) return;
+
+            stateGroup.style.display = 'block';
+            stateSelect.disabled = false;
+
+            // Use the same city list as predictions
+            stateSelect.innerHTML =
+            '<option value="__US__">USA</option>' +        // << ADD THIS
+            '<option value="">-- Select City --</option>' +
+            CITY_LIST.map(c =>
+                `<option value="${c.city}___${c.state}">${c.city}, ${c.stateAbbr}</option>`
+            ).join('');
+
+        }
+
+        function onStateChange() {
+            const cityVal = this.value || '';
+            const cityObj = cityVal ? parseCityValue(cityVal) : null;
+            console.log('City selected (clustering):', cityObj);
+
+            // Reset userHasZoomed so that the city zoom always happens
+            userHasZoomed = false;
+
+            showLoading('Applying city filter...');
+
+            if (!currentYears.length) {
+                hideLoading();
+                console.warn('No years available to render');
+                return;
+            }
+
+            const idx = parseInt(document.getElementById('yearSlider').value, 10) || 0;
+            const year = currentYears[idx];
+
+            try {
+                renderClusteringMap(year, cityObj, true);
+            } catch (err) {
+                console.error('Error rendering clustering for city:', err);
+                const stats = document.getElementById('stats');
+                stats.style.display = 'block';
+                stats.className = 'status error';
+                stats.textContent = 'Error rendering clustering: ' + (err && err.message ? err.message : String(err));
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        
+        function renderClusteringMap(year, cityObj, shouldZoom = false) {
+            console.log('Rendering clustering for:', year, 'city:', cityObj, 'shouldZoom:', shouldZoom);
+            
+            const numericYear = Number(year);
+            let filtered = currentData.filter(d => Number(d.YEAR) === numericYear);
+            
+            // Filter by city if provided
+            // Filter by city AND state if provided
+            if (cityObj && cityObj.city && cityObj.state) {
+                const cityLower = cityObj.city.toLowerCase().trim();
+                const stateLower = cityObj.state.toLowerCase().trim();
+                const stateAbbrLower = cityObj.stateAbbr ? cityObj.stateAbbr.toLowerCase().trim() : '';
+                console.log('Filtering for city:', cityLower, 'state:', stateLower, 'abbr:', stateAbbrLower);
+                
+                filtered = filtered.filter(d => {
+                    const rowCity = (d.City || d.city || d.CITY || '').toString().toLowerCase().trim();
+                    const rowState = (d.State || d.state || d.STATE || '').toString().toLowerCase().trim();
+                    
+                    // Match city AND (full state name OR state abbreviation)
+                    const cityMatch = rowCity === cityLower;
+                    const stateMatch = rowState === stateLower || rowState === stateAbbrLower;
+                    const match = cityMatch && stateMatch;
+                    
+                    if (!match && rowCity === cityLower) {
+                        console.log('City matched but state did not:', rowCity, 'state in data:', rowState, 'looking for:', stateLower, 'or', stateAbbrLower);
+                    }
+                    return match;
+                });
+                console.log('After city/state filter:', filtered.length);
+            }
+            
+            console.log('Filtered data:', filtered.length);
+
+            const lookup = {};
+            filtered.forEach(d => {
+                if (d.GISJOIN) lookup[d.GISJOIN] = d;
+            });
+            
+            // Pre-filter features that have data for this year
+            const features = [];
+            for (let i = 0; i < geoData.features.length; i++) {
+                const f = geoData.features[i];
+                const gisjoin = f.properties.GISJOIN;
+                if (lookup[gisjoin]) {
+                    features.push({
+                        type: 'Feature',
+                        geometry: f.geometry,
+                        properties: {...f.properties, ...lookup[gisjoin]}
+                    });
+                }
+            }
+            
+            console.log('Features to render:', features.length);
+            
+            const colors = [
+                '#e41a1c', '#377eb8', '#4daf4a', '#984ea3', 
+                '#ff7f00', '#ffff33', '#a65628', '#f781bf', '#999999'
+            ];
+            
+            function getClusterColor(macroLabel) {
+                const c = parseInt(macroLabel);
+                if (isNaN(c) || c < 0 || c >= 9) {
+                    return '#cccccc';
+                }
+                return colors[c];
+            }
+            
+            // Remove old layer and create new one
+            // The CSS transitions will still make color changes smooth
+            if (currentLayer) map.removeLayer(currentLayer);
+            if (legend) map.removeControl(legend);
+            
+            currentLayer = L.geoJSON({type: 'FeatureCollection', features}, {
+                style: (f) => {
+                    const macroLabel = f.properties.macro_label;
+                    const color = getClusterColor(macroLabel);
+                    return {
+                        fillColor: color,
+                        weight: 0.5,
+                        opacity: 0.8,
+                        color: '#333',
+                        fillOpacity: 0.7
+                    };
+                },
+                onEachFeature: (feature, layer) => {
+                layer.on('mouseover', (e) => {
+                    const props = feature.properties || {};
+                    const rows = [
+                        {label: 'GISJOIN', value: props.GISJOIN || '—'},
+                        {label: 'City', value: props.City || props.city || props.CITY || '—'},
+                        {label: 'State', value: props.State || props.state || props.STATE || '—'},  // 👈 NEW
+                        {label: 'Year', value: props.YEAR || '—'},
+                        {label: 'Cluster', value: props.macro_label != null ? (props.macro_label + 1) : '—'}
+                    ];
+                    
+                    if (props.cluster_name) {
+                        rows.push({label: 'Name', value: props.cluster_name});
+                    }
+                    
+                    if (props.description) {
+                        rows.push({label: 'Description', value: props.description});
+                    }
+                    
+                    showInfoCard('Clustering', rows, e);
+                });
+                layer.on('mousemove', positionInfoCard);
+                layer.on('mouseout', hideInfoCard);
+            },
+
+                interactive: true,  // Enable interactions
+                renderer: L.canvas()  // Use canvas for better performance
+            }).addTo(map);
+            
+            // Only zoom if shouldZoom is true (when user selects a new city)
+            if (shouldZoom) {
+                if (cityObj && cityObj.city) {
+                    try {
+                        const cityBounds = currentLayer.getBounds();
+                        if (cityBounds && typeof cityBounds.isValid === 'function' && cityBounds.isValid()) {
+                            map.fitBounds(cityBounds, { padding: [40, 40], maxZoom: 12, animate: true });
+                        }
+                    } catch (e) {
+                        console.warn('Could not fit bounds to city features:', e);
+                    }
+                } else if (!userHasZoomed) {
+                    const layerBounds = currentLayer.getBounds();
+                    const targetBounds = USA_BOUNDS.isValid() ? USA_BOUNDS : layerBounds;
+                    map.fitBounds(targetBounds.isValid() ? targetBounds : layerBounds, {
+                        padding: [50, 50],
+                        animate: false,
+                        maxZoom: 6
+                    });
+                }
+            }
+            
+            // Create mapping of macro_label to cluster_name and find unique clusters in this view
+            const clusterNameMap = {};
+            const clusterValuesInMap = [];
+            features.forEach(f => {
+                const macroLabel = f.properties.macro_label;
+                const clusterName = f.properties.cluster_name;
+                if (macroLabel != null) {
+                    clusterValuesInMap.push(macroLabel);
+                    if (clusterName && !clusterNameMap[macroLabel]) {
+                        clusterNameMap[macroLabel] = clusterName;
+                    }
+                }
+            });
+            
+            // Get unique clusters that appear in this map view
+            const uniqueClusterIds = [...new Set(clusterValuesInMap)].sort((a, b) => a - b);
+            
+            // Update legend - only show clusters that appear in the current view
+            legend = L.control({position: 'bottomright'});
+            legend.onAdd = function() {
+                const div = L.DomUtil.create('div', 'legend');
+                div.innerHTML = `<div class="legend-title">Clusters - ${year}</div>`;
+
+                // Only loop through clusters that actually appear in the map
+                uniqueClusterIds.forEach(clusterId => {
+                    const displayId = clusterId + 1; // show 1–9 instead of 0–8
+                    const clusterName =
+                        clusterNameMap[clusterId] || `Cluster ${displayId}`;
+
+                    div.innerHTML += `
+                        <div style="display: flex; align-items: center; margin: 5px 0;">
+                            <span style="width: 18px; text-align: right; margin-right: 6px; color: #333; font-weight: 600;">
+                                ${displayId}
+                            </span>
+                            <div style="width: 20px; height: 20px; background: ${colors[clusterId]}; margin-right: 8px; border: 1px solid #333;"></div>
+                            <span style="color: #333;">${clusterName}</span>
+                        </div>
+                    `;
+                });
+                return div;
+            };
+
+            legend.addTo(map);
+            
+            // Update stats
+            const uniqueClusters = uniqueClusterIds;
+            
+            const stats = document.getElementById('stats');
+            stats.style.display = 'block';
+            stats.className = 'status success';
+            stats.innerHTML = `
+                <b>Clustering ${year}: ${features.length.toLocaleString()} tracts</b><br>
+                Clusters found: ${uniqueClusters.sort((a,b) => a-b).join(', ')}
+            `;
+        }
+
+        function renderPredictionsMap(year, variable, cityObj, shouldZoom = false) {
+            console.log('Rendering predictions:', year, variable, 'shouldZoom:', shouldZoom);
+                    
+            if (legend) map.removeControl(legend);
+                    
+            const numericYear = Number(year);
+            let filtered = currentData.filter(d => Number(d.YEAR) === numericYear);
+
+            // Filter further by city using the City column in predictions.csv
+            // Filter further by city AND state using the City and State columns in predictions.csv
+            if (cityObj && cityObj.city && cityObj.state) {
+                const cityLower = cityObj.city.toLowerCase().trim();
+                const stateLower = cityObj.state.toLowerCase().trim();
+                const stateAbbrLower = cityObj.stateAbbr ? cityObj.stateAbbr.toLowerCase().trim() : '';
+                console.log('Filtering predictions for city:', cityLower, 'state:', stateLower, 'abbr:', stateAbbrLower);
+
+                filtered = filtered.filter(d => {
+                    const rowCity = (d.City || d.city || d.CITY || '').toString().toLowerCase().trim();
+                    const rowState = (d.State || d.state || d.STATE || '').toString().toLowerCase().trim();
+                    
+                    // Match city AND (full state name OR state abbreviation)
+                    const cityMatch = rowCity === cityLower;
+                    const stateMatch = rowState === stateLower || rowState === stateAbbrLower;
+                    const match = cityMatch && stateMatch;
+                    
+                    if (!match && rowCity === cityLower) {
+                        console.log('City matched but state did not:', rowCity, 'state in data:', rowState, 'looking for:', stateLower, 'or', stateAbbrLower);
+                    }
+                    return match;
+                });
+                console.log('After city/state filter:', filtered.length);
+            }
+
+
+            console.log('Filtered data:', filtered.length);
+            
+            const lookup = {};
+            filtered.forEach(d => {
+                if (d.GISJOIN) lookup[d.GISJOIN] = d;
+            });
+            
+            // Pre-filter and prepare features
+            const features = [];
+            for (let i = 0; i < geoData.features.length; i++) {
+                const f = geoData.features[i];
+                const gisjoin = f.properties.GISJOIN;
+                if (lookup[gisjoin]) {
+                    features.push({
+                        type: 'Feature',
+                        geometry: f.geometry,
+                        properties: {...f.properties, ...lookup[gisjoin]}
+                    });
+                }
+            }
+            
+            console.log('Features to render:', features.length);
+
+            // If no features match the selected city/year, clear map and notify user
+            if (!features || features.length === 0) {
+                if (currentLayer) { try { map.removeLayer(currentLayer); } catch(e){}; currentLayer = null; }
+                if (legend) { try { map.removeControl(legend); } catch(e){}; legend = null; }
+                const statsEl = document.getElementById('stats');
+                statsEl.style.display = 'block';
+                statsEl.className = 'status error';
+                statsEl.textContent = `No geographic features matched for ${cityObj && cityObj.city ? cityObj.city + ', ' + cityObj.state : 'selection'} in ${year}.`;
+                return;
+            }
+
+            // Raw values from data
+            const rawValues = features
+                .map(f => f.properties[variable])
+                .filter(v => v != null && !isNaN(v));
+
+            if (!rawValues || rawValues.length === 0) {
+                if (currentLayer) { try { map.removeLayer(currentLayer); } catch(e){}; currentLayer = null; }
+                if (legend) { try { map.removeControl(legend); } catch(e){}; legend = null; }
+                const statsEl = document.getElementById('stats');
+                statsEl.style.display = 'block';
+                statsEl.className = 'status error';
+                statsEl.textContent = `No numeric values found for "${toTitleCaseLabel(variable)}" in the selected city/year.`;
+                return;
+            }
+
+            // Clamp negatives to 0 for visualization
+            // Clamp negatives to 0 for visualization and remove any non-numbers
+            const values = rawValues
+                .map(v => {
+                    const num = Number(v);
+                    if (isNaN(num) || num == null) return 0;
+                    return num < 0 ? 0 : num;
+                })
+                .filter(v => !isNaN(v));
+
+
+            let min = Math.min(...values);
+            let max = Math.max(...values);
+            if (min === 0) {
+            const positives = values.filter(v => v > 0);
+            if (positives.length > 0) {
+                min = Math.min(...positives);
+                }
+            }
+
+            console.log('Range (legend):', min, '-', max);
+
+            
+            const colors = ['#2166ac', '#67a9cf', '#f7f7f7', '#fddbc7', '#d73027'];
+            
+            function getValueColor(val) {
+                // val is already clamped to 0+ when we call this
+                const norm = (val - min) / (max - min || 1);
+                const idx = Math.min(Math.floor(norm * (colors.length - 1)), colors.length - 1);
+                return colors[idx];
+            }
+
+            // Always recreate layer with current year's data to ensure all features are shown
+            // CSS transitions will still make the updates smooth
+            if (currentLayer) map.removeLayer(currentLayer);
+            if (legend) map.removeControl(legend);
+            
+            currentLayer = L.geoJSON({type: 'FeatureCollection', features}, {
+                style: (f) => {
+                    let val = Number(f.properties[variable]);
+                    if (isNaN(val) || val == null) val = 0;
+                    if (val < 0) val = 0; // clamp
+                    const color = getValueColor(val);
+                    return {
+                        fillColor: color,
+                        weight: 0.5,
+                        opacity: 0.8,
+                        color: '#333',
+                        fillOpacity: 0.7
+                    };
+                },
+
+                onEachFeature: (feature, layer) => {
+                layer.on('mouseover', (e) => {
+                    const props = feature.properties || {};
+                    const val = props[variable];
+
+                    showInfoCard('Prediction', [
+                        {label: 'GISJOIN', value: props.GISJOIN || '—'},
+                        {label: 'City', value: props.City || props.city || props.CITY || '—'},
+                        {label: 'State', value: props.State || props.state || props.STATE || '—'},
+                        {label: 'Year', value: props.YEAR || '—'},
+                        {label: toTitleCaseLabel(variable), value: formatNumber(val, 2)}
+                    ], e);
+                });
+
+                layer.on('mousemove', positionInfoCard);
+                layer.on('mouseout', hideInfoCard);
+            },
+                interactive: true,  // Enable interactions
+                renderer: L.canvas()  // Use canvas for better performance
+            }).addTo(map);
+            
+            // Only zoom if shouldZoom is true (when user selects a new city)
+            if (shouldZoom) {
+                if (cityObj && cityObj.city) {
+                    try {
+                        const cityBounds = currentLayer.getBounds();
+                        if (cityBounds && typeof cityBounds.isValid === 'function' && cityBounds.isValid()) {
+                            map.fitBounds(cityBounds, {
+                                padding: [40, 40],
+                                maxZoom: 12,
+                                animate: true
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('Could not fit bounds to city features:', e);
+                    }
+                } else if (!userHasZoomed) {
+                    const layerBounds = currentLayer.getBounds();
+                    const targetBounds = USA_BOUNDS.isValid() ? USA_BOUNDS : layerBounds;
+                    map.fitBounds(targetBounds.isValid() ? targetBounds : layerBounds, {
+                        padding: [50, 50],
+                        animate: false,
+                        maxZoom: 6
+                    });
+                }
+            }
+
+            
+            // Add legend
+            legend = L.control({position: 'bottomright'});
+            legend.onAdd = function() {
+                const div = L.DomUtil.create('div', 'legend');
+                const cityLabel = cityObj && cityObj.city ? ` (${cityObj.city} - ${cityObj.state})` : '';
+                div.innerHTML = `
+                    <div class="legend-title">${toTitleCaseLabel(variable)} - ${year}${cityLabel}</div>
+                    <div class="legend-scale"></div>
+                    <div class="legend-labels">
+                        <span>${formatNumber(min, 0)}</span>
+                        <span>${formatNumber(max, 0)}</span>
+                    </div>
+
+                `;
+                return div;
+            };
+            legend.addTo(map);
+            
+            const stats = document.getElementById('stats');
+            stats.style.display = 'block';
+            stats.className = 'status success';
+            const mean = values.reduce((a, b) => a + b, 0) / values.length;
+            stats.innerHTML = `
+                <b>Predictions ${year}: ${features.length.toLocaleString()} tracts</b><br>
+                ${toTitleCaseLabel(variable)}<br>
+                Min: ${formatNumber(min, 2)}<br>
+                Max: ${formatNumber(max, 2)}<br>
+                Mean: ${formatNumber(mean, 2)}
+            `;
+
+        }
+        
+        // Start when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
+    </script>
+</body>
+</html>
